@@ -17,7 +17,6 @@ function App() {
   });
   const [currentView, setCurrentView] = useState('register');
 
-  // 添加登录成功的处理函数
   const handleLoginSuccess = (userData) => {
     localStorage.setItem('user', JSON.stringify(userData));
     setCurrentUser(userData);
@@ -43,7 +42,6 @@ function App() {
     }
   };
 
-  // 根据登录状态过滤菜单项
   const getMenuItems = () => {
     if (currentUser) {
       return [
@@ -103,7 +101,7 @@ function App() {
       </Header>
       <Content style={{ 
         padding: '24px', 
-        marginTop: '64px',  // 为固定的header留出空间
+        marginTop: '64px',  
         minHeight: 'calc(100vh - 64px)',
         width: '100%',
         boxSizing: 'border-box'
