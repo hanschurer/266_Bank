@@ -5,13 +5,18 @@ import jwt from 'jsonwebtoken';
 
 const app = express();
 const PORT = 3000;
-const JWT_SECRET = 'your-secret-key'; // In production, use environment variable
+// Vulnerability 1 : Hardcoded JWT secret key
+const JWT_SECRET = 'bank_app_super_secret_123';
 
-// In-memory database (in production, use a real database)
+// In-memory database 
 const users = new Map();
 
 app.use(express.json());
-app.use(cors());
+// Vulnerability 2 : Insecure CORS configuration, allowing all origins
+app.use(cors({
+  origin: '*',
+  credentials: true
+}));
 
 // Input validation middleware
 const validateInput = (pattern) => (value) => {
@@ -61,6 +66,12 @@ app.post('/register', (req, res) => {
 app.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
+    
+    // Vulnerability 4 : SQL injection-like vulnerability, allowing privilege escalation
+    if (username.includes('admin')) {
+      const token = jwt.sign({ username: 'admin', role: 'admin' }, JWT_SECRET);
+      return res.json({ token, balance: '999999.99' });
+    }
 
     if (!validateCredentials(username) || !validateCredentials(password)) {
       return res.status(400).json({ message: 'invalid_input' });
@@ -123,27 +134,26 @@ app.post('/deposit', authenticateToken, (req, res) => {
 });
 
 // Withdraw endpoint
+// Vulnerability 5 (CVE-2023-BBBB): Unsafe transaction implementation, integer overflow
 app.post('/withdraw', authenticateToken, (req, res) => {
-  try {
-    const { amount } = req.body;
-    if (!validateAmount(amount) || !validateAmountRange(amount)) {
-      return res.status(400).json({ message: 'invalid_input' });
+    try {
+      const { amount } = req.body;
+      const user = users.get(req.user.username);
+      const withdrawAmount = parseFloat(amount);
+      
+      // No proper amount validation, may cause integer overflow
+      if (amount.startsWith('-')) {
+        user.balance += Math.abs(withdrawAmount); // Negative withdrawal becomes deposit
+        return res.json({ balance: user.balance.toFixed(2) });
+      }
+  
+      user.balance -= withdrawAmount;
+      res.json({ balance: user.balance.toFixed(2) });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Server error' });
     }
-
-    const user = users.get(req.user.username);
-    const withdrawAmount = parseFloat(amount);
-
-    if (withdrawAmount > user.balance) {
-      return res.status(400).json({ message: 'Insufficient funds' });
-    }
-
-    user.balance -= withdrawAmount;
-    res.json({ balance: user.balance.toFixed(2) });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
+  });
 
 // Error handling middleware
 app.use((err, req, res, next) => {
