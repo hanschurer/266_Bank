@@ -1,35 +1,119 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState } from 'react';
+import { Layout, Menu, Typography } from 'antd';
+import './App.css';
+import { UserOutlined, DollarOutlined, LoginOutlined, LogoutOutlined } from '@ant-design/icons';
+
+const { Header, Content } = Layout;
+const { Title } = Typography;
+
+import Register from './components/Register';
+import Login from './components/Login';
+import Account from './components/Account';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [currentUser, setCurrentUser] = useState(() => {
+    const savedUser = localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+  const [currentView, setCurrentView] = useState('register');
+
+  // 添加登录成功的处理函数
+  const handleLoginSuccess = (userData) => {
+    localStorage.setItem('user', JSON.stringify(userData));
+    setCurrentUser(userData);
+    setCurrentView('account');
+  };
+
+  const handleMenuClick = (key) => {
+    switch (key) {
+      case '1':
+        setCurrentView('register');
+        break;
+      case '2':
+        setCurrentView('login');
+        break;
+      case '3':
+        setCurrentView('account');
+        break;
+      case '4':
+        localStorage.removeItem('user');
+        setCurrentUser(null);
+        setCurrentView('login');
+        break;
+    }
+  };
+
+  // 根据登录状态过滤菜单项
+  const getMenuItems = () => {
+    if (currentUser) {
+      return [
+        {
+          key: '3',
+          icon: <DollarOutlined />,
+          label: 'Account',
+        },
+        {
+          key: '4',
+          icon: <LogoutOutlined />,
+          label: 'Logout',
+        },
+      ];
+    }
+    return [
+      {
+        key: '1',
+        icon: <UserOutlined />,
+        label: 'Register',
+      },
+      {
+        key: '2',
+        icon: <LoginOutlined />,
+        label: 'Login',
+      },
+    ];
+  };
+
+  const renderContent = () => {
+    if (!currentUser && currentView !== 'register') {
+      return <Login onLoginSuccess={handleLoginSuccess} />;
+    }
+
+    switch (currentView) {
+      case 'register':
+        return <Register />;
+      case 'account':
+        return <Account user={currentUser} />;
+      default:
+        return null;
+    }
+  };
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <Layout className="layout">
+      <Header style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+        <Title level={3} className="header-title" style={{ color: 'white', margin: '0 20px 0 0', flexShrink: 0 }}>Bank App</Title>
+        <Menu
+          theme="dark"
+          mode="horizontal"
+          selectedKeys={[currentView === 'account' ? '3' : currentView === 'register' ? '1' : '2']}
+          onClick={({ key }) => handleMenuClick(key)}
+          style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
+          items={getMenuItems()}
+        />
+      </Header>
+      <Content style={{ 
+        padding: '24px', 
+        marginTop: '64px',  // 为固定的header留出空间
+        minHeight: 'calc(100vh - 64px)',
+        width: '100%',
+        boxSizing: 'border-box'
+      }}>
+        <div className="site-layout-content">
+          {renderContent()}
+        </div>
+      </Content>
+    </Layout>
+  );
 }
 
-export default App
+export default App;
