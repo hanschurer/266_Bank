@@ -2,14 +2,31 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import sqlite3 from 'sqlite3';
+import { open } from 'sqlite';
 
 const app = express();
 const PORT = 3000;
-// Vulnerability 1 : Hardcoded JWT secret key
+// Vulnerability 1 :hardcoded secret key
+
 const JWT_SECRET = 'bank_app_super_secret_123';
 
-// In-memory database 
-const users = new Map();
+// Create database connection
+let db;
+(async () => {
+  db = await open({
+    filename: './bank.db',
+    driver: sqlite3.Database
+  });
+  
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      username TEXT PRIMARY KEY,
+      password TEXT NOT NULL,
+      balance REAL NOT NULL
+    )
+  `);
+})();
 
 app.use(express.json());
 // Vulnerability 2 : Insecure CORS configuration, allowing all origins
@@ -32,8 +49,8 @@ const validateAmountRange = (amount) => {
   return num >= 0 && num <= 4294967295.99;
 };
 
-// Registration endpoint
-app.post('/register', (req, res) => {
+
+app.post('/register', async (req, res) => {
   try {
     const { username, password, balance } = req.body;
 
@@ -45,15 +62,17 @@ app.post('/register', (req, res) => {
       return res.status(400).json({ message: 'invalid_input' });
     }
 
-    if (users.has(username)) {
+    
+    const existingUser = await db.get('SELECT username FROM users WHERE username = ?', username);
+    if (existingUser) {
       return res.status(400).json({ message: 'Username already exists' });
     }
 
     const hashedPassword = bcrypt.hashSync(password, 10);
-    users.set(username, {
-      password: hashedPassword,
-      balance: parseFloat(balance)
-    });
+    await db.run(
+      'INSERT INTO users (username, password, balance) VALUES (?, ?, ?)',
+      [username, hashedPassword, parseFloat(balance)]
+    );
 
     res.status(201).json({ message: 'Registration successful' });
   } catch (error) {
@@ -66,8 +85,8 @@ app.post('/register', (req, res) => {
 app.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    
-    // Vulnerability 4 : SQL injection-like vulnerability, allowing privilege escalation
+    // Vulnerability 3 : privileged user bypassing authentication
+
     if (username.includes('admin')) {
       const token = jwt.sign({ username: 'admin', role: 'admin' }, JWT_SECRET);
       return res.json({ token, balance: '999999.99' });
@@ -76,9 +95,12 @@ app.post('/login', async (req, res) => {
     if (!validateCredentials(username) || !validateCredentials(password)) {
       return res.status(400).json({ message: 'invalid_input' });
     }
-
-    const user = users.get(username);
-    if (!user || !bcrypt.compareSync(password, user.password)) {
+    // Vulnerability 4 : SQL injection vulnerability
+    // Intentionally create SQL injection vulnerability: directly concatenate user input without using parameterized query
+    const query = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`;
+    const user = await db.get(query);
+    
+    if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
@@ -108,24 +130,32 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Get balance endpoint
-app.get('/balance', authenticateToken, (req, res) => {
-  const user = users.get(req.user.username);
-  res.json({ balance: user.balance.toFixed(2) });
+// Balance query endpoint
+app.get('/balance', authenticateToken, async (req, res) => {
+  try {
+    const user = await db.get('SELECT balance FROM users WHERE username = ?', req.user.username);
+    res.json({ balance: user.balance.toFixed(2) });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
 // Deposit endpoint
-app.post('/deposit', authenticateToken, (req, res) => {
+app.post('/deposit', authenticateToken, async (req, res) => {
   try {
     const { amount } = req.body;
     if (!validateAmount(amount) || !validateAmountRange(amount)) {
       return res.status(400).json({ message: 'invalid_input' });
     }
 
-    const user = users.get(req.user.username);
     const depositAmount = parseFloat(amount);
-    user.balance += depositAmount;
+    await db.run(
+      'UPDATE users SET balance = balance + ? WHERE username = ?',
+      [depositAmount, req.user.username]
+    );
 
+    const user = await db.get('SELECT balance FROM users WHERE username = ?', req.user.username);
     res.json({ balance: user.balance.toFixed(2) });
   } catch (error) {
     console.error(error);
@@ -134,36 +164,49 @@ app.post('/deposit', authenticateToken, (req, res) => {
 });
 
 // Withdraw endpoint
-// Vulnerability: Integer overflow in balance calculation
-app.post('/withdraw', authenticateToken, (req, res) => {
-    try {
-      const { amount } = req.body;
-      
-      if (!validateAmount(amount) || !validateAmountRange(amount)) {
-        return res.status(400).json({ message: 'invalid_input' });
-      }
-
-      const user = users.get(req.user.username);
-      const withdrawAmount = parseFloat(amount);
-      
-      // 漏洞：不安全的余额计算，可能导致整数溢出
-      const currentBalance = parseFloat(user.balance);
-      const newBalance = currentBalance - withdrawAmount;
-      
-      // 不安全的余额检查，可被整数溢出绕过
-      if (newBalance < 0) {
-        return res.status(400).json({ message: 'Insufficient funds' });
-      }
-      
-      // 直接赋值新余额，不进行安全检查
-      user.balance = newBalance;
-      res.json({ balance: user.balance.toFixed(2) });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: 'Server error' });
+app.post('/withdraw', authenticateToken, async (req, res) => {
+  try {
+    const { amount } = req.body;
+    
+    if (!validateAmount(amount) || !validateAmountRange(amount)) {
+      return res.status(400).json({ message: 'invalid_input' });
     }
-});
 
+    const withdrawAmount = parseFloat(amount);
+    // Vulnerability 5 : Integer overflow vulnerability
+    // Keep integer overflow vulnerability
+    const user = await db.get('SELECT balance FROM users WHERE username = ?', req.user.username);
+    const newBalance = parseFloat(user.balance) - withdrawAmount;
+    
+    if (newBalance < 0) {
+      return res.status(400).json({ message: 'Insufficient funds' });
+    }
+    
+    await db.run(
+      'UPDATE users SET balance = ? WHERE username = ?',
+      [newBalance, req.user.username]
+    );
+
+    res.json({ balance: newBalance.toFixed(2) });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+// Vulnerability 6: Information disclosure
+app.get('/debug', (req, res) => {
+  const debugInfo = {
+    dbConfig: {
+      path: db.config.filename,
+      driver: db.config.driver
+    },
+    serverConfig: {
+      secret: JWT_SECRET,
+      port: PORT
+    }
+  };
+  res.json(debugInfo);
+});
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -173,4 +216,5 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
 
