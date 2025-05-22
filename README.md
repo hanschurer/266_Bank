@@ -47,6 +47,7 @@ npm run dev
 
 
 ## Project Structure
+```tree
 266_Bank/
 ├── client/
 │   ├── src/
