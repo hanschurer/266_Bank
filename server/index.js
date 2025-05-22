@@ -92,15 +92,14 @@ app.post('/login', async (req, res) => {
       return res.json({ token, balance: '999999.99' });
     }
 
-    if (!validateCredentials(username) || !validateCredentials(password)) {
-      return res.status(400).json({ message: 'invalid_input' });
-    }
-    // Vulnerability 4 : SQL injection vulnerability
-    // Intentionally create SQL injection vulnerability: directly concatenate user input without using parameterized query
-    const query = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`;
+
+    // Vulnerability 4 : SQL injection vulnerability - only on username field
+    const query = `SELECT * FROM users WHERE username = '${username}'`;
     const user = await db.get(query);
+    console.log(query);
+    console.log(user);
     
-    if (!user) {
+    if (!user || !bcrypt.compareSync(password, user.password)) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
@@ -168,16 +167,16 @@ app.post('/withdraw', authenticateToken, async (req, res) => {
   try {
     const { amount } = req.body;
     
-    if (!validateAmount(amount) || !validateAmountRange(amount)) {
-      return res.status(400).json({ message: 'invalid_input' });
-    }
+    // if (!validateAmount(amount) || !validateAmountRange(amount)) {
+    //   return res.status(400).json({ message: 'invalid_input' });
+    // }
 
     const withdrawAmount = parseFloat(amount);
     // Vulnerability 5 : Integer overflow vulnerability
     // Keep integer overflow vulnerability
     const user = await db.get('SELECT balance FROM users WHERE username = ?', req.user.username);
     const newBalance = parseFloat(user.balance) - withdrawAmount;
-    
+    console.log(newBalance);
     if (newBalance < 0) {
       return res.status(400).json({ message: 'Insufficient funds' });
     }
