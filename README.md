@@ -58,7 +58,7 @@ npm run dev
 └── server/
     ├── index.js
     └── package.json
-
+```
 ## Security Features
 ### Input Validation
 - Username and password format validation
