@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Layout, Menu, Typography } from 'antd';
 import './App.css';
-import { UserOutlined, DollarOutlined, LoginOutlined, LogoutOutlined } from '@ant-design/icons';
+import { UserOutlined, DollarOutlined, LoginOutlined, LogoutOutlined, MessageOutlined } from '@ant-design/icons';
 
 const { Header, Content } = Layout;
 const { Title } = Typography;
@@ -9,6 +9,7 @@ const { Title } = Typography;
 import Register from './components/Register';
 import Login from './components/Login';
 import Account from './components/Account';
+import ContactUs from './components/ContactUs';
 
 function App() {
   const [currentUser, setCurrentUser] = useState(() => {
@@ -23,25 +24,6 @@ function App() {
     setCurrentView('account');
   };
 
-  const handleMenuClick = (key) => {
-    switch (key) {
-      case '1':
-        setCurrentView('register');
-        break;
-      case '2':
-        setCurrentView('login');
-        break;
-      case '3':
-        setCurrentView('account');
-        break;
-      case '4':
-        localStorage.removeItem('user');
-        setCurrentUser(null);
-        setCurrentView('login');
-        break;
-    }
-  };
-
   const getMenuItems = () => {
     if (currentUser) {
       return [
@@ -49,6 +31,11 @@ function App() {
           key: '3',
           icon: <DollarOutlined />,
           label: 'Account',
+        },
+        {
+          key: '5',
+          icon: <MessageOutlined />,
+          label: 'Contact Us',
         },
         {
           key: '4',
@@ -71,6 +58,28 @@ function App() {
     ];
   };
 
+  const handleMenuClick = (key) => {
+    switch (key) {
+      case '1':
+        setCurrentView('register');
+        break;
+      case '2':
+        setCurrentView('login');
+        break;
+      case '3':
+        setCurrentView('account');
+        break;
+      case '4':
+        localStorage.removeItem('user');
+        setCurrentUser(null);
+        setCurrentView('login');
+        break;
+      case '5':
+        setCurrentView('contact');
+        break;
+    }
+  };
+
   const renderContent = () => {
     if (!currentUser && currentView !== 'register') {
       return <Login onLoginSuccess={handleLoginSuccess} />;
@@ -81,6 +90,8 @@ function App() {
         return <Register onRegisterSuccess={() => handleMenuClick('2')} />;
       case 'account':
         return <Account user={currentUser} />;
+      case 'contact':
+        return <ContactUs />;
       default:
         return null;
     }
