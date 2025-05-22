@@ -78,7 +78,7 @@ function App() {
 
     switch (currentView) {
       case 'register':
-        return <Register />;
+        return <Register onRegisterSuccess={() => handleMenuClick('2')} />;
       case 'account':
         return <Account user={currentUser} />;
       default:

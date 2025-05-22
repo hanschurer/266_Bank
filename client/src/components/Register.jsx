@@ -1,9 +1,11 @@
-import { Form, Input, Button, message } from 'antd';
+import { Form, Input, Button, message, Modal } from 'antd';
 import { useState } from 'react';
 import axios from 'axios';
 
-const Register = () => {
+const Register = ({ onRegisterSuccess }) => {  
   const [loading, setLoading] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [serverMessage, setServerMessage] = useState('');  
 
   const validateAmount = (_, value) => {
     if (!value) return Promise.reject('Initial balance is required');
@@ -37,51 +39,72 @@ const Register = () => {
     setLoading(true);
     try {
       const response = await axios.post('http://localhost:3000/register', values);
-      message.success('Registration successful!');
+      setServerMessage(response.data.message);  
+      setModalVisible(true);
     } catch (error) {
-      message.error(error.response?.data?.message || 'Registration failed');
+      setServerMessage(error.response?.data?.message || 'Registration failed');
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleModalOk = () => {
+    setModalVisible(false);
+    onRegisterSuccess();  
+  };
+
   return (
-    <Form
-      name="register"
-      onFinish={onFinish}
-      layout="vertical"
-      style={{ maxWidth: 400, margin: '0 auto' }}
-    >
-      <Form.Item
-        label="Username"
-        name="username"
-        rules={[{ validator: validateCredentials }]}
+    <>
+      <Form
+        name="register"
+        onFinish={onFinish}
+        layout="vertical"
+        style={{ maxWidth: 400, margin: '0 auto' }}
       >
-        <Input />
-      </Form.Item>
+        <Form.Item
+          label="Username"
+          name="username"
+          rules={[{ validator: validateCredentials }]}
+        >
+          <Input />
+        </Form.Item>
 
-      <Form.Item
-        label="Password"
-        name="password"
-        rules={[{ validator: validateCredentials }]}
+        <Form.Item
+          label="Password"
+          name="password"
+          rules={[{ validator: validateCredentials }]}
+        >
+          <Input.Password />
+        </Form.Item>
+
+        <Form.Item
+          label="Initial Balance"
+          name="balance"
+          rules={[{ validator: validateAmount }]}
+        >
+          <Input placeholder="0.00" />
+        </Form.Item>
+
+        <Form.Item>
+          <Button type="primary" htmlType="submit" loading={loading} block>
+            Register
+          </Button>
+        </Form.Item>
+      </Form>
+
+      <Modal
+        title={serverMessage === 'Registration successful' ? 'Success' : 'Error'}
+        open={modalVisible}
+        onOk={serverMessage === 'Registration successful' ? handleModalOk : () => setModalVisible(false)}
+        onCancel={() => setModalVisible(false)}
+        okText={serverMessage === 'Registration successful' ? 'Go Login' : 'OK'}
+        cancelText="Cancel"
+        closable={false}
       >
-        <Input.Password />
-      </Form.Item>
-
-      <Form.Item
-        label="Initial Balance"
-        name="balance"
-        rules={[{ validator: validateAmount }]}
-      >
-        <Input placeholder="0.00" />
-      </Form.Item>
-
-      <Form.Item>
-        <Button type="primary" htmlType="submit" loading={loading} block>
-          Register
-        </Button>
-      </Form.Item>
-    </Form>
+        <p>{serverMessage}</p>
+      </Modal>
+    </>
   );
 };
 

@@ -134,26 +134,35 @@ app.post('/deposit', authenticateToken, (req, res) => {
 });
 
 // Withdraw endpoint
-// Vulnerability 5 (CVE-2023-BBBB): Unsafe transaction implementation, integer overflow
+// Vulnerability: Integer overflow in balance calculation
 app.post('/withdraw', authenticateToken, (req, res) => {
     try {
       const { amount } = req.body;
+      
+      if (!validateAmount(amount) || !validateAmountRange(amount)) {
+        return res.status(400).json({ message: 'invalid_input' });
+      }
+
       const user = users.get(req.user.username);
       const withdrawAmount = parseFloat(amount);
       
-      // No proper amount validation, may cause integer overflow
-      if (amount.startsWith('-')) {
-        user.balance += Math.abs(withdrawAmount); // Negative withdrawal becomes deposit
-        return res.json({ balance: user.balance.toFixed(2) });
+      // 漏洞：不安全的余额计算，可能导致整数溢出
+      const currentBalance = parseFloat(user.balance);
+      const newBalance = currentBalance - withdrawAmount;
+      
+      // 不安全的余额检查，可被整数溢出绕过
+      if (newBalance < 0) {
+        return res.status(400).json({ message: 'Insufficient funds' });
       }
-  
-      user.balance -= withdrawAmount;
+      
+      // 直接赋值新余额，不进行安全检查
+      user.balance = newBalance;
       res.json({ balance: user.balance.toFixed(2) });
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: 'Server error' });
     }
-  });
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
