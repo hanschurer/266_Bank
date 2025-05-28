@@ -9,12 +9,7 @@ const ContactUs = () => {
 
   const onFinish = (values) => {
     // Intentionally create XSS vulnerability: render user input without filtering
-    setSubmittedMessage(`
-      <div class="feedback-message">
-        <h3>Your feedback has been received:</h3>
-        <p>${values.message}</p>
-      </div>
-    `);
+    setSubmittedMessage(values.message);
   };
 
   return (
@@ -41,8 +36,13 @@ const ContactUs = () => {
         </Form.Item>
       </Form>
 
-      {/* Unsafe rendering method, vulnerable to XSS attacks */}
-      <div dangerouslySetInnerHTML={{ __html: submittedMessage }} />
+    {/* Safe rendering method */}
+    {submittedMessage && (
+        <div className="feedback-message">
+          <h3>Your feedback has been received:</h3>
+          <p>{submittedMessage}</p>
+        </div>
+      )}
     </div>
   );
 };

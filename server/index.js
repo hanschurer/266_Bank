@@ -9,7 +9,7 @@ const app = express();
 const PORT = 3000;
 // Vulnerability 1 :hardcoded secret key
 
-const JWT_SECRET = 'bank_app_super_secret_123';
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_should_be_changed_in_production';
 
 // Create database connection
 let db;
@@ -30,8 +30,9 @@ let db;
 
 app.use(express.json());
 // Vulnerability 2 : Insecure CORS configuration, allowing all origins
+// Solution: Restrict the allowed origins to only the trusted domains that need to access your API.
 app.use(cors({
-  origin: '*',
+  origin: ['http://localhost:5173'], // Replace with actual trusted domains, e.g., your frontend URL
   credentials: true
 }));
 
@@ -85,19 +86,11 @@ app.post('/register', async (req, res) => {
 app.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    // Vulnerability 3 : privileged user bypassing authentication
-
-    if (username.includes('admin')) {
-      const token = jwt.sign({ username: 'admin', role: 'admin' }, JWT_SECRET);
-      return res.json({ token, balance: '999999.99' });
-    }
-
 
     // Vulnerability 4 : SQL injection vulnerability - only on username field
-    const query = `SELECT * FROM users WHERE username = '${username}'`;
-    const user = await db.get(query);
-    console.log(query);
-    console.log(user);
+    // Solution: Use parameterized queries (prepared statements) which separate SQL code from user input, preventing injection.
+    const user = await db.get('SELECT * FROM users WHERE username = ?', [username]);
+
     
     if (!user || !bcrypt.compareSync(password, user.password)) {
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -167,45 +160,39 @@ app.post('/withdraw', authenticateToken, async (req, res) => {
   try {
     const { amount } = req.body;
     
-    // if (!validateAmount(amount) || !validateAmountRange(amount)) {
-    //   return res.status(400).json({ message: 'invalid_input' });
-    // }
+    if (!validateAmount(amount) || !validateAmountRange(amount)) {
+      return res.status(400).json({ message: 'invalid_input' });
+    }
 
-    const withdrawAmount = parseFloat(amount);
-    // Vulnerability 5 : Integer overflow vulnerability
-    // Keep integer overflow vulnerability
+    // Fix the vulnerability: Before executing a withdrawal, obtain the user's current balance and check if there is sufficient funds.
+    // Avoid directly calculating newBalance. Instead, check first and then update.
     const user = await db.get('SELECT balance FROM users WHERE username = ?', req.user.username);
-    const newBalance = parseFloat(user.balance) - withdrawAmount;
-    console.log(newBalance);
-    if (newBalance < 0) {
+    
+   
+    if (!user || typeof user.balance === 'undefined') {
+      return res.status(500).json({ message: 'User balance not found' });
+    }
+
+
+    if (user.balance < withdrawAmount) {
       return res.status(400).json({ message: 'Insufficient funds' });
     }
     
+    
     await db.run(
-      'UPDATE users SET balance = ? WHERE username = ?',
-      [newBalance, req.user.username]
+      'UPDATE users SET balance = balance - ? WHERE username = ?',
+      [withdrawAmount, req.user.username]
     );
 
-    res.json({ balance: newBalance.toFixed(2) });
+  
+    const updatedUser = await db.get('SELECT balance FROM users WHERE username = ?', req.user.username);
+    res.json({ balance: updatedUser.balance.toFixed(2) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 });
-// Vulnerability 6: Information disclosure
-app.get('/debug', (req, res) => {
-  const debugInfo = {
-    dbConfig: {
-      path: db.config.filename,
-      driver: db.config.driver
-    },
-    serverConfig: {
-      secret: JWT_SECRET,
-      port: PORT
-    }
-  };
-  res.json(debugInfo);
-});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
